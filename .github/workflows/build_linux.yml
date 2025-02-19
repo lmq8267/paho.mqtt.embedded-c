@@ -58,9 +58,9 @@ jobs:
        run: |
         wget -q -c https://github.com/lmq8267/Toolchain/releases/download/DS-213j/armada370-gcc493_glibc220_hard-GPL.txz -P /opt/
         tar -Jxf /opt/armada370-gcc493_glibc220_hard-GPL.txz -C /opt/
-        export CC="/opt/arm-unknown-linux-gnueabi/bin/arm-unknown-linux-gnueabi-gcc"
-        export CXX="/opt/arm-unknown-linux-gnueabi/bin/arm-unknown-linux-gnueabi-g++"
-        export STRIP="/opt/arm-unknown-linux-gnueabi/bin/arm-unknown-linux-gnueabi-strip"
+        echo "CC=/opt/arm-unknown-linux-gnueabi/bin/arm-unknown-linux-gnueabi-gcc" >> $GITHUB_ENV
+        echo "CXX=/opt/arm-unknown-linux-gnueabi/bin/arm-unknown-linux-gnueabi-g++" >> $GITHUB_ENV
+        echo "STRIP=/opt/arm-unknown-linux-gnueabi/bin/arm-unknown-linux-gnueabi-strip" >> $GITHUB_ENV
         
      - name: 安装 UPX
        uses: crazy-max/ghaction-upx@v3
@@ -72,6 +72,7 @@ jobs:
        run: |
          mkdir -p build && cd build
          export CC="$CC -static"
+         export CXX="$CXX -static"
          cmake ..
          make
          

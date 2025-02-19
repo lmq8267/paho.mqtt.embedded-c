@@ -264,7 +264,7 @@ int main(int argc, char** argv)
 		printf("主题名是： %s\n", topic);
 
 	getopts(argc, argv);	
-	printf("\n状态码：0 表示成功，1 表示失败。\n\n");
+	printf("\n状态码：0 表示成功，-1 表示失败。\n\n");
 	Network n;
 	MQTTClient c;
 

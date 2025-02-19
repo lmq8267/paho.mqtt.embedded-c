@@ -16,7 +16,7 @@
 
 # MQTTPacket Library
 file(GLOB SOURCES "*.c")
-add_library(paho-embed-mqtt3c SHARED ${SOURCES})
+add_library(paho-embed-mqtt3c STATIC ${SOURCES})
 install(TARGETS paho-embed-mqtt3c DESTINATION /usr/lib)
 target_compile_definitions(paho-embed-mqtt3c PRIVATE MQTT_SERVER MQTT_CLIENT)
 

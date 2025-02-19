@@ -20,7 +20,7 @@
 file(GLOB SOURCES "*.c" "linux/*.c")
 
 add_library(
-  paho-embed-mqtt3cc SHARED
+  paho-embed-mqtt3cc STATIC
   ${SOURCES}
 )
 install(TARGETS paho-embed-mqtt3cc DESTINATION /usr/lib)

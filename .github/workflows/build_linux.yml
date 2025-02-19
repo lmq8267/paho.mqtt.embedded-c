@@ -36,8 +36,6 @@ jobs:
 
         - target: mips-linux-musl
           URL: mips-linux-muslsf
-          
-        - target: synology-DS_213j
 
     runs-on: ubuntu-latest
     steps:
@@ -46,21 +44,11 @@ jobs:
        uses: actions/checkout@v4
        
      - name: 下载gcc
-       if: matrix.target != 'synology-DS_213j'
        uses: lmq8267/dl-musl@main
        with:
         target: ${{ matrix.URL }}
         static: true
         gccpath: /tmp
-        
-     - name: synology-DS_213j
-       if: matrix.target == 'synology-DS_213j'
-       run: |
-        wget -q -c https://github.com/lmq8267/Toolchain/releases/download/DS-213j/armada370-gcc493_glibc220_hard-GPL.txz -P /opt/
-        tar -Jxf /opt/armada370-gcc493_glibc220_hard-GPL.txz -C /opt/
-        echo "CC=/opt/arm-unknown-linux-gnueabi/bin/arm-unknown-linux-gnueabi-gcc" >> $GITHUB_ENV
-        echo "CXX=/opt/arm-unknown-linux-gnueabi/bin/arm-unknown-linux-gnueabi-g++" >> $GITHUB_ENV
-        echo "STRIP=/opt/arm-unknown-linux-gnueabi/bin/arm-unknown-linux-gnueabi-strip" >> $GITHUB_ENV
         
      - name: 安装 UPX
        uses: crazy-max/ghaction-upx@v3

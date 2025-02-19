@@ -1,38 +1,104 @@
-name: "Builds for Linux"
-on: [push, pull_request]
-
+name: 编译巴法云stdoutsubc
+on:
+  workflow_dispatch:
+env:
+  TZ: Asia/Shanghai
 jobs:
   build:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out code
-        uses: actions/checkout@v2
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install doxygen
-      - name: Build
-        run: |
-          rm -rf build.paho
-          mkdir build.paho
-          cd build.paho
-          echo "pwd $PWD"
-          cmake ..
-          cmake --build .
-      - name: Start test broker
-        run: |
-          git clone https://github.com/eclipse/paho.mqtt.testing.git
-          cd paho.mqtt.testing/interoperability
-          python3 startbroker.py -c localhost_testing.conf &
-      - name: Start test proxy
-        run: |
-          python3 test/mqttsas.py localhost 1883 1885 &
-      - name: run tests
-        run: |
-          cd build.paho
-          ctest -VV --timeout 600
-      - name: clean up
-        run: |
-          killall python3 || true
-          sleep 3 # allow broker time to terminate and report
+    name: Build ${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+        - target: aarch64-linux-musl
+          os: ubuntu-latest
+          URL: aarch64-linux-musl
+          ARCH_FLAG: linux-aarch64
+          
+        - target: x86_64-linux-musl
+          os: ubuntu-latest
+          URL: x86_64-linux-musl
+          ARCH_FLAG: linux-x86_64
+            
+        - target: i686-linux-musl
+          os: ubuntu-latest
+          URL: i686-linux-musl
+          ARCH_FLAG: linux-generic32
+        
+        - target: armv7-linux-musleabihf
+          os: ubuntu-latest
+          URL: armv7l-linux-musleabihf
+          ARCH_FLAG: linux-armv4
 
+        - target: armv7-linux-musleabi
+          os: ubuntu-latest
+          URL: armv7m-linux-musleabi
+          ARCH_FLAG: linux-armv4
+          
+        - target: arm-linux-musleabihf
+          os: ubuntu-latest
+          URL: arm-linux-musleabihf
+          ARCH_FLAG: linux-armv4
+
+        - target: arm-linux-musleabi
+          os: ubuntu-latest
+          URL: arm-linux-musleabi
+          ARCH_FLAG: linux-armv4
+
+        - target: mipsel-linux-musl
+          os: ubuntu-latest
+          URL: mipsel-linux-muslsf
+          ARCH_FLAG: linux-mips32
+
+        - target: mips-linux-musl
+          os: ubuntu-latest
+          URL: mips-linux-muslsf
+          ARCH_FLAG: linux-mips32
+          
+        - target: synology-DS_213j
+
+    runs-on: ${{ matrix.os }}
+    steps:
+    
+     - name: Checkout code
+       uses: actions/checkout@v4
+       
+     - name: 下载gcc
+       if: matrix.target != 'synology-DS_213j'
+       uses: lmq8267/dl-musl@main
+       with:
+        target: ${{ matrix.URL }}
+        static: true
+        gccpath: /tmp
+        
+     - name: synology-DS_213j
+       if: matrix.target == 'synology-DS_213j'
+       run: |
+        wget -q -c https://github.com/lmq8267/vnt/releases/download/1.2.1/armada370-gcc493_glibc220_hard-GPL.txz -P /opt/
+        tar -Jxf /opt/armada370-gcc493_glibc220_hard-GPL.txz -C /opt/
+        export CC="/opt/arm-unknown-linux-gnueabi/bin/arm-unknown-linux-gnueabi-gcc"
+        export CXX="/opt/arm-unknown-linux-gnueabi/bin/arm-unknown-linux-gnueabi-g++"
+        export STRIP="/opt/arm-unknown-linux-gnueabi/bin/arm-unknown-linux-gnueabi-strip"
+        
+     - name: 安装 UPX
+       uses: crazy-max/ghaction-upx@v3
+       with:
+        version: latest
+        install-only: true
+        
+     - name: 编译
+       run: |
+         mkdir -p build && cd build
+         export CC="$CC -static"
+         cmake ..
+         make
+         
+         file MQTTClient-C/samples/linux/stdoutsubc 
+         $STRIP MQTTClient-C/samples/linux/stdoutsubc
+         file MQTTClient-C/samples/linux/stdoutsubc
+         upx --lzma --best MQTTClient-C/samples/linux/stdoutsubc
+         
+     - uses: actions/upload-artifact@v4
+       with:
+        name: stdoutsubc-${{ matrix.os }}
+        path: build/MQTTClient-C/samples/linux/stdoutsubc

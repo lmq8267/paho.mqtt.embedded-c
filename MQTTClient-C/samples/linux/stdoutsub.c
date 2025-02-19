@@ -56,18 +56,28 @@ volatile int toStop = 0;
 
 void usage()
 {
-	printf("MQTT stdout subscriber\n");
-	printf("Usage: stdoutsub topicname <options>, where options are:\n");
-	printf("  --host <hostname> (default is localhost)\n");
-	printf("  --port <port> (default is 1883)\n");
-	printf("  --qos <qos> (default is 2)\n");
-	printf("  --delimiter <delim> (default is \\n)\n");
-	printf("  --clientid <clientid> (default is hostname+timestamp)\n");
-	printf("  --username none\n");
-	printf("  --password none\n");
-	printf("  --showtopics <on or off> (default is on if the topic has a wildcard, else off)\n");
-	exit(-1);
+    printf("\n");
+    printf("====================================\n");
+    printf("       MQTT 标准输出订阅器         \n");
+    printf("====================================\n");
+    printf("用法: stdoutsub 主题名称 <命令>\n");
+    printf("\n可选命令:\n");
+    printf("  --host <主机名>         （默认: bemfa.com，MQTT 服务器地址）\n");
+    printf("  --port <端口>           （默认: 9501，MQTT 服务器端口）\n");
+    printf("  --qos <服务质量>        （默认: 1，MQTT QoS 等级，可选 0 或 1）\n");
+    printf("  --delimiter <分隔符>    （默认: \\n，消息之间的分隔符）\n");
+    printf("  --clientid <账户私钥>   （默认: 主机名 + 时间戳）\n");
+    printf("  --username <用户名>     （默认: none，无用户名）\n");
+    printf("  --password <密码>       （默认: none，无密码）\n");
+    printf("  --showtopics <on|off>   （默认: off，是否显示主题名，若主题含通配符则默认开启）\n");
+    printf("  --script <脚本路径>     （收到 MQTT 消息时，执行指定脚本）\n");
+    printf("\n");
+    printf("示例:\n");
+    printf("  stdoutsub 主题名 --host bemfa.com --port 9501 --qos 1 --clientid asa48fd88e53d356ab21841a951284d\n");
+    printf("\n");
+    exit(-1);
 }
+
 
 
 void cfinish(int sig)
@@ -88,9 +98,10 @@ struct opts_struct
 	char* host;
 	int port;
 	int showtopics;
+	char* script;
 } opts =
 {
-	(char*)"stdout-subscriber", 0, (char*)"\n", QOS2, NULL, NULL, (char*)"localhost", 1883, 0
+	(char*)"stdout-subscriber", 0, (char*)"\n", QOS1, NULL, NULL, (char*)"bemfa.com", 9501, 0
 };
 
 
@@ -105,13 +116,22 @@ void getopts(int argc, char** argv)
 			if (++count < argc)
 			{
 				if (strcmp(argv[count], "0") == 0)
+				{
 					opts.qos = QOS0;
+				}
 				else if (strcmp(argv[count], "1") == 0)
+				{
 					opts.qos = QOS1;
+				}
 				else if (strcmp(argv[count], "2") == 0)
+				{
 					opts.qos = QOS2;
+					printf("警告：MQTT 支持Qos0 Qos1等级，支持retian保留消息，不支持qos2，使用qos2会被强制下线，次数过多可造成账号异常无法使用。\n");
+				}
 				else
+				{
 					usage();
+				}
 			}
 			else
 				usage();
@@ -172,6 +192,13 @@ void getopts(int argc, char** argv)
 			else
 				usage();
 		}
+		else if (strcmp(argv[count], "--script") == 0)
+		{
+			if (++count < argc)
+				opts.script = argv[count];  
+			else
+				usage();
+		}
 		count++;
 	}
 	
@@ -189,6 +216,31 @@ void messageArrived(MessageData* md)
 	else
 		printf("%.*s%s", (int)message->payloadlen, (char*)message->payload, opts.delimiter);
 	//fflush(stdout);
+
+	if (opts.script)
+	{
+    		char payload_buf[1024];
+    		int len = (message->payloadlen < 1023) ? message->payloadlen : 1023;
+   		memcpy(payload_buf, message->payload, len);
+    		payload_buf[len] = '\0'; 
+
+    		char command[2048];
+    		if (opts.showtopics)
+    		{
+        	// 格式: <主题名> "<消息>"
+        	snprintf(command, sizeof(command), "sh %s \"%.*s\" \"%s\" &",
+                 	opts.script,
+                 	md->topicName->lenstring.len, md->topicName->lenstring.data,
+                 	payload_buf);
+    		}
+    		else 
+    		{
+        	// 仅发送消息，不带主题 "<消息>"
+        	snprintf(command, sizeof(command), "sh %s \"%s\" &", opts.script, payload_buf);
+    		}
+
+    		system(command);
+	}
 }
 
 
@@ -204,12 +256,15 @@ int main(int argc, char** argv)
 	char* topic = argv[1];
 
 	if (strchr(topic, '#') || strchr(topic, '+'))
+	{
 		opts.showtopics = 1;
+		printf("检测到主题名称中包含通配符 # 或 + ，默认开启消息输出主题名。\n");
+	}
 	if (opts.showtopics)
-		printf("topic is %s\n", topic);
+		printf("主题名是： %s\n", topic);
 
 	getopts(argc, argv);	
-
+	printf("\n状态码：0 表示成功，1 表示失败。\n\n");
 	Network n;
 	MQTTClient c;
 
@@ -229,26 +284,25 @@ int main(int argc, char** argv)
 
 	data.keepAliveInterval = 10;
 	data.cleansession = 1;
-	printf("Connecting to %s %d\n", opts.host, opts.port);
+	printf("正在连接到 【%s %d】\n", opts.host, opts.port);
 	
 	rc = MQTTConnect(&c, &data);
-	printf("Connected %d\n", rc);
+	printf("连接状态： %d\n", rc);
     
-    printf("Subscribing to %s\n", topic);
+    	printf("正在订阅主题： 【%s】\n", topic);
 	rc = MQTTSubscribe(&c, topic, opts.qos, messageArrived);
-	printf("Subscribed %d\n", rc);
+	printf("订阅状态： %d\n", rc);
 
 	while (!toStop)
 	{
 		MQTTYield(&c, 1000);	
 	}
 	
-	printf("Stopping\n");
+	printf("正在关闭...\n");
 
 	MQTTDisconnect(&c);
 	NetworkDisconnect(&n);
 
 	return 0;
 }
-
 

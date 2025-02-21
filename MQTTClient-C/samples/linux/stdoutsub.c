@@ -58,21 +58,29 @@ volatile int toStop = 0;
 #define MAX_CONCURRENT_SUBSCRIPTIONS 50
 
 // 日志输出函数
-void log_info(const char *format, ...)
+#include <stdio.h>
+#include <stdarg.h>
+#include <time.h>
+
+void log_error(const char *format, ...)
 {
     va_list args;
     va_start(args, format);
     
     time_t now;
     time(&now);
-    struct tm *tm_info = localtime(&now);
+    
+    struct tm *tm_info = gmtime(&now);
+    
+    now += 8 * 3600; 
+    tm_info = gmtime(&now); 
     
     char time_buf[20];
     strftime(time_buf, sizeof(time_buf), "%Y-%m-%d %H:%M:%S", tm_info);
     
-    fprintf(stdout, "[INFO] [%s]：", time_buf);
-    vfprintf(stdout, format, args);
-    fprintf(stdout, "\n");
+    fprintf(stderr, "[ERROR] [%s]：", time_buf);
+    vfprintf(stderr, format, args);
+    fprintf(stderr, "\n");
     
     va_end(args);
 }

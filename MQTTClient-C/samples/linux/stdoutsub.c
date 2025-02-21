@@ -84,7 +84,9 @@ void log_error(const char *format, ...)
     
     time_t now;
     time(&now);
-    struct tm *tm_info = localtime(&now);
+    struct tm *tm_info = gmtime(&now);
+    tm_info->tm_hour += 8;
+    mktime(tm_info)
     
     char time_buf[20];
     strftime(time_buf, sizeof(time_buf), "%Y-%m-%d %H:%M:%S", tm_info);

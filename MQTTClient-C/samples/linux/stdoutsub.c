@@ -54,34 +54,29 @@
 
 volatile int toStop = 0;
 
-// 最大并发订阅数
 #define MAX_CONCURRENT_SUBSCRIPTIONS 50
 
-// 日志输出函数
-#include <stdio.h>
-#include <stdarg.h>
-#include <time.h>
+void log_message(const char *level, FILE *stream, const char *format, va_list args)
+{
+    time_t now;
+    time(&now);
 
-void log_error(const char *format, ...)
+    now += 8 * 3600;
+    struct tm *tm_info = gmtime(&now);
+
+    char time_buf[20];
+    strftime(time_buf, sizeof(time_buf), "%Y-%m-%d %H:%M:%S", tm_info);
+
+    fprintf(stream, "[%s] [%s]：", level, time_buf);
+    vfprintf(stream, format, args);
+    fprintf(stream, "\n");
+}
+
+void log_info(const char *format, ...)
 {
     va_list args;
     va_start(args, format);
-    
-    time_t now;
-    time(&now);
-    
-    struct tm *tm_info = gmtime(&now);
-    
-    now += 8 * 3600; 
-    tm_info = gmtime(&now); 
-    
-    char time_buf[20];
-    strftime(time_buf, sizeof(time_buf), "%Y-%m-%d %H:%M:%S", tm_info);
-    
-    fprintf(stderr, "[ERROR] [%s]：", time_buf);
-    vfprintf(stderr, format, args);
-    fprintf(stderr, "\n");
-    
+    log_message("INFO", stdout, format, args);
     va_end(args);
 }
 
@@ -89,20 +84,7 @@ void log_error(const char *format, ...)
 {
     va_list args;
     va_start(args, format);
-    
-    time_t now;
-    time(&now);
-    struct tm *tm_info = gmtime(&now);
-    tm_info->tm_hour += 8;
-    mktime(tm_info)
-    
-    char time_buf[20];
-    strftime(time_buf, sizeof(time_buf), "%Y-%m-%d %H:%M:%S", tm_info);
-    
-    fprintf(stderr, "[ERROR] [%s]：", time_buf);
-    vfprintf(stderr, format, args);
-    fprintf(stderr, "\n");
-    
+    log_message("ERROR", stderr, format, args);
     va_end(args);
 }
 

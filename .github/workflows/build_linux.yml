@@ -67,6 +67,7 @@ jobs:
          mkdir -p /opt/bin
          cp -f MQTTPacket/samples/pub0sub1_nb /opt/bin/stdoutpub
          cp -f MQTTClient-C/samples/linux/stdoutsubc /opt/bin/
+         cp -f MQTTClient/samples/linux/stdoutsub /opt/bin/
          file /opt/bin/stdoutsubc 
          $STRIP /opt/bin/*
          file /opt/bin/stdoutsubc

@@ -297,12 +297,80 @@ void messageArrived(MessageData* md)
     }
 }
 
-int main(int argc, char** argv)
+void subscribeAndListen(MQTTClient *c, const char *topic_list)
+{
+    int topic_count = 0;
+    char *topics = strdup(topic_list);
+
+    char *topic = strtok(topics, ",");
+    while (topic)
+    {
+        topic_count++;
+        if (strchr(topic, '#') || strchr(topic, '+'))
+        {
+            log_info("检测到通配符订阅【%s】，默认开启主题显示。", topic);
+            opts.showtopics = 1;
+        }
+        topic = strtok(NULL, ",");
+    }
+    if (topic_count > 1)
+    {
+        opts.showtopics = 1;
+        log_info("检测到订阅多个主题，默认开启主题名显示。");
+    }
+    free(topics); 
+
+    // **开始订阅**
+    int subscribed_count = 0;
+    char *topics_for_subscribe = strdup(topic_list);
+    if (!topics_for_subscribe)
+    {
+        log_error("内存分配失败，无法进行订阅！");
+        return;
+    }
+
+    topic = strtok(topics_for_subscribe, ",");
+    while (topic)
+    {
+        if (MQTTSubscribe(c, topic, opts.qos, messageArrived) != 0)
+        {
+            log_error("订阅主题【%s】失败！", topic);
+        }
+        else
+        {
+            log_info("成功订阅主题【%s】", topic);
+            subscribed_count++;
+        }
+        topic = strtok(NULL, ",");
+    }
+    free(topics_for_subscribe); 
+
+    if (subscribed_count == 0)
+    {
+        log_error("未能成功订阅任何主题，等待 5 秒后重试...");
+        sleep(5);
+        return;
+    }
+
+    // **进入 MQTT 监听循环**
+    while (!toStop)
+    {
+        if (MQTTYield(c, 1000) != 0)
+        {
+            log_error("MQTT 连接丢失，尝试重连...");
+            break;
+        }
+    }
+}
+
+int main(int argc, char **argv)
 {
     if (argc < 2)
+    {
         usage();
+    }
 
-    char* topic_list = argv[1];
+    char *topic_list = argv[1]; 
     getopts(argc, argv);
 
     Network n;
@@ -338,59 +406,7 @@ int main(int argc, char** argv)
         }
 
         log_info("成功连接到 MQTT 服务器！");
-        int topic_count = 0;
-        char* topics = strdup(topic_list);
-        char* topic = strtok(topics, ",");
-    	while (topic)
-    	{
-        	topic_count++;
-        	if (strchr(topic, '#') || strchr(topic, '+'))
-		{
-			log_info("检测到主题名包含通配符 # 或 + ，默认开启主题名显示。");
-            		opts.showtopics = 1;
-		}
-        	topic = strtok(NULL, ",");
-    	}
-    	if (topic_count > 1)
-	{
-        	opts.showtopics = 1;
-		log_info("检测到订阅多个主题，默认开启主题名显示。");
-	}
-	free(topics);
-	    
-	char* topics_for_subscribe = strdup(topic_list);
-        topic = strtok(topics_for_subscribe, ",");
-        int subscribed_count = 0;
-        while (topic != NULL)
-        {
-            if (MQTTSubscribe(&c, topic, opts.qos, messageArrived) != 0)
-            {
-                log_error("订阅主题【%s】失败！", topic);
-            }
-            else
-            {
-                log_info("成功订阅主题【%s】", topic);
-		subscribed_count++;
-            }
-            topic = strtok(NULL, ",");
-        }
-	free(topics_for_subscribe);
-
-	if (subscribed_count == 0)
-        {
-            log_error("未能成功订阅任何主题，等待 5 秒后重试...");
-            sleep(5);
-            continue;
-        }
-	    
-        while (!toStop)
-        {
-            if (MQTTYield(&c, 1000) != 0)
-            {
-                log_error("MQTT 连接丢失，尝试重连...");
-                break;
-            }
-        }
+        subscribeAndListen(&c, topic_list);
 
         log_info("断开 MQTT 连接，5 秒后重新连接...");
         MQTTDisconnect(&c);

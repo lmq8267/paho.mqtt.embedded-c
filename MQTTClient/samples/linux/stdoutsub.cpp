@@ -38,9 +38,9 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <memory.h>
+#include <pthread.h>
 #include <time.h>
-#include <vector>
-#include <string>
+
 #include "MQTTClient.h"
 
 #define DEFAULT_STACK_SIZE -1
@@ -53,6 +53,7 @@
 
 
 volatile int toStop = 0;
+#define MAX_CONCURRENT_SUBSCRIPTIONS 50
 
 void log_message(const char *level, FILE *stream, const char *format, va_list args)
 {
@@ -292,106 +293,99 @@ void messageArrived(MQTT::MessageData& md)
     	}
 }
 
-/**
- * 连接 MQTT 服务器（带自动重试）
- */
-bool myconnect(IPStack &ipstack, MQTT::Client<IPStack, Countdown, 1000> &client, MQTTPacket_connectData &data)
+void myconnect(IPStack &ipstack, MQTT::Client<IPStack, Countdown, 1000> &client, MQTTPacket_connectData &data, const char *topic)
 {
     int retry_count = 0;
     const int max_retries = 3;
 
-    while (retry_count < max_retries && !toStop)
+    while (retry_count < max_retries)
     {
-        log_info("<=== 正在连接到 MQTT 服务器（尝试 %d/%d）===>【%s:%d】", retry_count + 1, max_retries, opts.host, opts.port);
+        log_info("【%s】<=== 正在连接到 MQTT 服务器（尝试 %d/%d）===>【%s:%d】", topic, retry_count + 1, max_retries, opts.host, opts.port);
         int rc = ipstack.connect(opts.host, opts.port);
         if (rc != 0)
         {
-            log_error("TCP 连接失败，返回码：%d", rc);
+            log_error("【%s】TCP 连接失败，返回码：%d", topic, rc);
             retry_count++;
-            sleep(5);
+            sleep(5);  // 等待 5 秒再重试
             continue;
         }
 
         rc = client.connect(data);
         if (rc != 0)
         {
-            log_error("MQTT 连接失败，返回码：%d", rc);
+            log_error("【%s】MQTT 连接失败，返回码：%d", topic, rc);
             retry_count++;
             ipstack.disconnect();
             sleep(5);
             continue;
         }
 
-        log_info("成功连接到 MQTT 服务器！");
-        return true;
+        log_info("【%s】成功连接到 MQTT 服务器！", topic);
+        return;
     }
 
-    log_error("连接失败，达到最大重试次数，放弃连接。");
-    return false;
+    log_error("【%s】连接失败，达到最大重试次数，放弃连接。", topic);
 }
 
-/**
- * 订阅多个主题
- */
-void subscribeTopics(IPStack &ipstack, MQTT::Client<IPStack, Countdown, 1000> &client, std::vector<std::string> &topics)
+void *subscribeTopic(void *topic_param)
 {
+    char *topic = strdup((char *)topic_param);  // 复制主题，防止传递的指针失效
+    IPStack ipstack;
+    MQTT::Client<IPStack, Countdown, 1000> client(ipstack);
+
+    MQTTPacket_connectData data = MQTTPacket_connectData_initializer;
+    data.willFlag = 0;
+    data.MQTTVersion = 3;
+    data.clientID.cstring = opts.clientid;
+    data.username.cstring = opts.username;
+    data.password.cstring = opts.password;
+    data.keepAliveInterval = 10;
+    data.cleansession = 1;
+
     while (!toStop)
     {
-        // **连接 MQTT 服务器**
-        MQTTPacket_connectData data = MQTTPacket_connectData_initializer;
-        data.clientID.cstring = opts.clientid;
-        data.username.cstring = opts.username;
-        data.password.cstring = opts.password;
-        data.keepAliveInterval = 10;
-        data.cleansession = 1;
+        myconnect(ipstack, client, data, topic);
 
-        if (!myconnect(ipstack, client, data))
+        if (!client.isConnected())
         {
-            log_error("无法连接到 MQTT 服务器，等待 5 秒后重试...");
+            log_error("【%s】无法连接到 MQTT 服务器，等待 10 秒后重试...", topic);
+            sleep(10);
+            continue;
+        }
+
+        int rc = client.subscribe(topic, opts.qos, messageArrived);
+        if (rc != 0)
+        {
+            log_error("【%s】订阅失败，返回码：%d", topic, rc);
+            client.disconnect();
+            ipstack.disconnect();
             sleep(5);
             continue;
         }
 
-        // **订阅所有主题**
-        int subscribed_count = 0;
-        for (const auto &topic : topics)
-        {
-            int rc = client.subscribe(topic.c_str(), opts.qos, messageArrived);
-            if (rc != 0)
-            {
-                log_error("订阅主题【%s】失败，返回码：%d", topic.c_str(), rc);
-            }
-            else
-            {
-                log_info("成功订阅主题【%s】", topic.c_str());
-                subscribed_count++;
-            }
-        }
+        log_info("【%s】成功订阅主题！", topic);
 
-        if (subscribed_count == 0)
-        {
-            log_error("未能成功订阅任何主题，等待 5 秒后重试...");
-            sleep(5);
-            continue;
-        }
-
-        // **进入 MQTT 监听循环**
         while (!toStop)
         {
-            int rc = client.yield(1000);
+            rc = client.yield(1000);
             if (rc != 0 || !client.isConnected())
             {
-                log_error("MQTT 连接中断，尝试重连...");
+                log_error("【%s】MQTT 连接中断，尝试重连...", topic);
                 break;  // 退出监听，重新连接
             }
         }
 
-        log_info("断开 MQTT 连接，准备重新连接...");
+        log_info("【%s】连接断开，准备重新连接...", topic);
         client.disconnect();
         ipstack.disconnect();
         sleep(5);
     }
+
+    log_info("【%s】线程终止，释放资源。", topic);
+    free(topic);
+    return NULL;
 }
+
 
 int main(int argc, char **argv)
 {
@@ -399,38 +393,27 @@ int main(int argc, char **argv)
         usage();
 
     getopts(argc, argv);
+    signal(SIGINT, cfinish);
+    signal(SIGTERM, cfinish);
 
-    // **解析订阅主题**
-    std::vector<std::string> topics;
-    char *topic_list = strdup(argv[1]);
+    char *topic_list = strdup(argv[1]); 
+    pthread_t threads[MAX_CONCURRENT_SUBSCRIPTIONS];
+
+    int thread_count = 0;
     char *topic = strtok(topic_list, ",");
-    int topic_count = 0;
-
-    while (topic)
+    while (topic != NULL && thread_count < MAX_CONCURRENT_SUBSCRIPTIONS)
     {
-        topic_count++;
-        if (strchr(topic, '#') || strchr(topic, '+'))
-        {
-            log_info("检测到主题名包含通配符 # 或 + ，默认开启主题名显示。");
-            opts.showtopics = 1;
-        }
-        topics.push_back(std::string(topic));
+        char *topic_copy = strdup(topic); 
+        pthread_create(&threads[thread_count], NULL, subscribeTopic, (void *)topic_copy);
+        thread_count++;
         topic = strtok(NULL, ",");
     }
 
-    if (topic_count > 1)
+    for (int i = 0; i < thread_count; i++)
     {
-        opts.showtopics = 1;
-        log_info("检测到订阅多个主题，默认开启主题名显示。");
+        pthread_join(threads[i], NULL);
     }
+
     free(topic_list);
-
-    // **初始化 MQTT**
-    IPStack ipstack;
-    MQTT::Client<IPStack, Countdown, 1000> client(ipstack);
-
-    // **订阅所有主题**
-    subscribeTopics(ipstack, client, topics);
-
     return 0;
 }

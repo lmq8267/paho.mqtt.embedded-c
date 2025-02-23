@@ -398,6 +398,5 @@ int main(int argc, char** argv)
         sleep(5);
     }
 
-    free(topic_list);
     return 0;
 }

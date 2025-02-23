@@ -78,7 +78,7 @@ int parse_args(int argc, char *argv[], MQTTConfig *config)
 /* 打印程序使用说明 */
 void print_usage(char *program_name)
 {
-    printf("用法: %s --host <host> --port <port> --clientid <client_id> --topic <topic> --msg <message> [--username <username>] [--password <password>]\n", program_name);
+    printf("用法: %s --host <host> --port <port> --clientid <token> --topic <topic> --msg <message> [--username <username>] [--password <password>]\n", program_name);
     printf("    --host      MQTT服务器地址（默认：bemfa.com）\n");
     printf("    --port      MQTT服务器端口（默认: 9501）\n");
     printf("    --clientid  账户私钥（不能为空）\n");

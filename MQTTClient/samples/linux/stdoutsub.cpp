@@ -346,8 +346,8 @@ int main(int argc, char **argv)
         data.clientID.cstring = opts.clientid;  
         data.username.cstring = opts.username;  
         data.password.cstring = opts.password;  
-        data.keepAliveInterval = 10;  
-        data.cleansession = 1;  
+        data.keepAliveInterval = 60;  
+        data.cleansession = 0;  
   
         rc = client.connect(data);  
         if (rc != 0)  

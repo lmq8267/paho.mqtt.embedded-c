@@ -329,7 +329,7 @@ int main(int argc, char **argv)
     while (!toStop)  
     {  
         IPStack ipstack;  
-        MQTT::Client<IPStack, Countdown, 1000> client(ipstack);  
+        MQTT::Client<IPStack, Countdown, 1000, 25> client(ipstack);  
   
         log_info("<=== 正在连接到 MQTT 服务器 ===>【%s:%d】", opts.host, opts.port);  
         int rc = ipstack.connect(opts.host, opts.port);  

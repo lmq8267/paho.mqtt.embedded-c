@@ -68,6 +68,7 @@ void log_message(const char *level, FILE *stream, const char *format, va_list ar
     fprintf(stream, "[%s] [%s]：", level, time_buf);
     vfprintf(stream, format, args);
     fprintf(stream, "\n");
+	fflush(stream); 
 }
 
 void log_info(const char *format, ...)
@@ -406,10 +407,18 @@ int main(int argc, char** argv)
         {  
             rc = MQTTYield(&c, 1000);  
             if (rc != 0)  
-            {  
-                log_error("MQTT 连接中断，状态码：%d，尝试重连...", rc);  
-                break;  
-            }  
+    		{  
+        			// 检查是否是网络断开  
+        			if (!c.isconnected)  
+        			{  
+            				log_error("MQTT 连接已断开(isconnected=false)，状态码：%d，尝试重连...", rc);  
+        			}  
+        			else  
+        			{  
+            				log_error("MQTT 连接中断，状态码：%d，尝试重连...", rc);  
+        			}  
+        			break;  
+    		}   
         }  
   
         log_info("连接已断开，准备重新连接...");  

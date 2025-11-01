@@ -242,8 +242,13 @@ int is_command_available(const char *command)
 void messageArrived(MQTT::MessageData& md)
 {
 	MQTT::Message &message = md.message;
+	// 添加空指针检查  
+    if (message.payloadlen > 0 && !message.payload) {  
+        log_error("消息 payload 无效！");  
+        return;  
+    }
 
-	if (opts.showtopics)
+	if (opts.showtopics && md.topicName.lenstring.data)
 		printf("%.*s\t", md.topicName.lenstring.len, md.topicName.lenstring.data);
 	if (opts.nodelimiter)
 		printf("%.*s", (int)message.payloadlen, (char*)message.payload);

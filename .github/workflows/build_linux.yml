@@ -61,9 +61,9 @@ jobs:
          mkdir -p build && cd build
          export CC="$CC -static"
          export CXX="$CXX -static"
-         export CFLAGS="$CFLAGS -Os -flto -ffunction-sections -fdata-sections"  
-         export CXXFLAGS="$CFLAGS -Os -flto -ffunction-sections -fdata-sections" 
-         export LDFLAGS="-Wl,--gc-sections -static"
+         #export CFLAGS="$CFLAGS -Os -flto -ffunction-sections -fdata-sections"  
+         #export CXXFLAGS="$CFLAGS -Os -flto -ffunction-sections -fdata-sections" 
+         #export LDFLAGS="-Wl,--gc-sections -static"
          cmake ..
          make
          

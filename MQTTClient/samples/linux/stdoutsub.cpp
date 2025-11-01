@@ -38,22 +38,20 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <memory.h>
-#include <pthread.h>
 #include <time.h>
+#include <stdlib.h>
+#include <signal.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
 #include "MQTTClient.h"
-
-#define DEFAULT_STACK_SIZE -1
-
 #include "linux.cpp"
-
-#include <signal.h>
-#include <sys/time.h>
-#include <stdlib.h>
-
 
 volatile int toStop = 0;
 #define MAX_CONCURRENT_SUBSCRIPTIONS 50
+
+pid_t child_pids[MAX_CONCURRENT_SUBSCRIPTIONS];
+int child_count = 0;
 
 void log_message(const char *level, FILE *stream, const char *format, va_list args)
 {
@@ -112,13 +110,20 @@ void usage()
     exit(-1);
 }
 
-
+/* ========== 信号处理函数 ========== */
 void cfinish(int sig)
 {
-	signal(SIGINT, NULL);
-	toStop = 1;
+    signal(sig, SIG_IGN);
+    toStop = 1;
+    log_info("收到信号 %d，准备终止所有子进程...", sig);
+    for (int i = 0; i < child_count; i++)
+    {
+        if (child_pids[i] > 0)
+        {
+            kill(child_pids[i], SIGTERM);
+        }
+    }
 }
-
 
 struct opts_struct
 {
@@ -294,20 +299,17 @@ void messageArrived(MQTT::MessageData& md)
     	}
 }
 
-void myconnect(IPStack &ipstack, MQTT::Client<IPStack, Countdown, 1000> &client, MQTTPacket_connectData &data, const char *topic)
+/* ========== MQTT 连接函数 ========== */
+void myconnect(IPStack &ipstack, MQTT::Client<IPStack, Countdown, 1000, 50> &client, MQTTPacket_connectData &data, const char *topic)
 {
-    int retry_count = 0;
-    const int max_retries = 3;
-
-    while (retry_count < max_retries)
+	log_info("MQTT服务器 %s:%d ...", opts.host, opts.port);
+    while (!toStop)
     {
-        log_info("【%s】<=== 正在连接到 MQTT 服务器（尝试 %d/%d）===>【%s:%d】", topic, retry_count + 1, max_retries, opts.host, opts.port);
         int rc = ipstack.connect(opts.host, opts.port);
         if (rc != 0)
         {
             log_error("【%s】TCP 连接失败，返回码：%d", topic, rc);
-            retry_count++;
-            sleep(5);  // 等待 5 秒再重试
+            sleep(5);
             continue;
         }
 
@@ -315,79 +317,73 @@ void myconnect(IPStack &ipstack, MQTT::Client<IPStack, Countdown, 1000> &client,
         if (rc != 0)
         {
             log_error("【%s】MQTT 连接失败，返回码：%d", topic, rc);
-            retry_count++;
             ipstack.disconnect();
             sleep(5);
             continue;
         }
 
-        log_info("【%s】成功连接到 MQTT 服务器！", topic);
+        log_info("【%s】连接成功！", topic);
         return;
     }
-
-    log_error("【%s】连接失败，达到最大重试次数，放弃连接。", topic);
 }
 
-void *subscribeTopic(void *topic_param)
+/* ========== 子进程逻辑 ========== */
+void run_subscriber(const char *topic)
 {
-    char *topic = strdup((char *)topic_param);  // 复制主题，防止传递的指针失效
+    signal(SIGINT, cfinish);
+    signal(SIGTERM, cfinish);
+
     IPStack ipstack;
-    MQTT::Client<IPStack, Countdown, 1000, 50> client(ipstack); 
+    MQTT::Client<IPStack, Countdown, 1000, 50> client(ipstack);
 
     MQTTPacket_connectData data = MQTTPacket_connectData_initializer;
-    data.willFlag = 0;
     data.MQTTVersion = 3;
     data.clientID.cstring = opts.clientid;
     data.username.cstring = opts.username;
     data.password.cstring = opts.password;
-    data.keepAliveInterval = 10;
-    data.cleansession = 1;
+    data.keepAliveInterval = 60;
 
     while (!toStop)
     {
         myconnect(ipstack, client, data, topic);
-
         if (!client.isConnected())
         {
-            log_error("【%s】无法连接到 MQTT 服务器，等待 10 秒后重试...", topic);
-            sleep(10);
+            sleep(5);
             continue;
         }
 
         int rc = client.subscribe(topic, opts.qos, messageArrived);
         if (rc != 0)
         {
-            log_error("【%s】订阅失败，返回码：%d", topic, rc);
+            log_error("【%s】订阅失败：%d", topic, rc);
             client.disconnect();
             ipstack.disconnect();
             sleep(5);
             continue;
         }
 
-        log_info("【%s】成功订阅主题！", topic);
+        log_info("【%s】成功订阅！", topic);
 
         while (!toStop)
         {
             rc = client.yield(1000);
             if (rc != 0 || !client.isConnected())
             {
-                log_error("【%s】MQTT 连接中断，尝试重连...", topic);
-                break;  // 退出监听，重新连接
+                log_error("【%s】连接中断，重新连接中...", topic);
+                break;
             }
         }
 
-        log_info("【%s】连接断开，准备重新连接...", topic);
         client.disconnect();
         ipstack.disconnect();
         sleep(5);
     }
 
-    log_info("【%s】线程终止，释放资源。", topic);
-    free(topic);
-    return NULL;
+    log_info("【%s】进程退出。", topic);
+    exit(0);
 }
 
-
+/* ========== 主进程逻辑 ========== */
 int main(int argc, char **argv)
 {
     if (argc < 2)
@@ -397,24 +393,43 @@ int main(int argc, char **argv)
     signal(SIGINT, cfinish);
     signal(SIGTERM, cfinish);
 
-    char *topic_list = strdup(argv[1]); 
-    pthread_t threads[MAX_CONCURRENT_SUBSCRIPTIONS];
-
-    int thread_count = 0;
+    char *topic_list = strdup(argv[1]);
     char *topic = strtok(topic_list, ",");
-    while (topic != NULL && thread_count < MAX_CONCURRENT_SUBSCRIPTIONS)
+
+    while (topic != NULL && child_count < MAX_CONCURRENT_SUBSCRIPTIONS)
     {
-        char *topic_copy = strdup(topic); 
-        pthread_create(&threads[thread_count], NULL, subscribeTopic, (void *)topic_copy);
-        thread_count++;
+        pid_t pid = fork();
+        if (pid == 0)
+        {
+            run_subscriber(topic);
+            exit(0);
+        }
+        else if (pid > 0)
+        {
+            log_info("主题【%s】创建子进程 pid=%d", topic, pid);
+            child_pids[child_count++] = pid;
+        }
+        else
+        {
+            log_error("创建子进程失败（主题 %s）！", topic);
+        }
         topic = strtok(NULL, ",");
     }
 
-    for (int i = 0; i < thread_count; i++)
+    /* 父进程等待所有子进程 */
+    while (child_count > 0)
     {
-        pthread_join(threads[i], NULL);
+        int status;
+        pid_t pid = wait(&status);
+        if (pid > 0)
+        {
+            log_info("子进程 %d 退出。", pid);
+            child_count--;
+        }
+        else
+            break;
     }
 
-    free(topic_list);
+    log_info("所有子进程已退出，程序结束。");
     return 0;
 }

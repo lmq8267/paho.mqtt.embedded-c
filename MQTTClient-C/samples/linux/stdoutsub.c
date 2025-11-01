@@ -249,8 +249,19 @@ int is_command_available(const char *command)
 void messageArrived(MessageData* md)
 {
     MQTTMessage* message = md->message;
+	// 添加空指针检查  
+    if (!md || !md->topicName || !message) {  
+        log_error("收到无效的消息数据！");  
+        return;  
+    }  
+  
+    // 检查 payload 是否有效  
+    if (message->payloadlen > 0 && !message->payload) {  
+        log_error("消息 payload 无效！");  
+        return;  
+    }
 
-    if (opts.showtopics)
+    if (opts.showtopics && md->topicName->lenstring.data)
         printf("%.*s\t", md->topicName->lenstring.len, md->topicName->lenstring.data);
     if (opts.nodelimiter)
         printf("%.*s", (int)message->payloadlen, (char*)message->payload);

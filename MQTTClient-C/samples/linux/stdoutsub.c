@@ -326,7 +326,7 @@ void subscribeTopic_process(const char* topic)
     sigaction(SIGHUP, &sa, NULL);
 
 	
-    log_info("MQTT服务器 %s:%d ===>", opts.host, opts.port);
+    log_info("MQTT服务器 %s:%d", opts.host, opts.port);
     while (!toStop)
     {
         NetworkInit(&n);

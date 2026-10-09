@@ -1,0 +1,11 @@
+{
+	"luci-app-bafa": {
+		"description": "Grant UCI access for luci-app-bafa",
+		"read": {
+			"uci": [ "bafa" ]
+		},
+		"write": {
+			"uci": [ "bafa" ]
+		}
+	}
+}

@@ -41,7 +41,7 @@ jobs:
     steps:
     
      - name: Checkout code
-       uses: actions/checkout@v4
+       uses: actions/checkout@main
        
      - name: 下载gcc
        uses: lmq8267/dl-musl@main

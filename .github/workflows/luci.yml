@@ -1,0 +1,173 @@
+name: 打包luci
+
+# 固件 SDK 地址:
+#   ipk -> OpenWrt 22.03.7 : https://downloads.openwrt.org/releases/22.03.7/targets/<平台>/
+#   apk -> OpenWrt SNAPSHOT: https://downloads.openwrt.org/snapshots/targets/<平台>/
+# luci-app-bafa 为 git 源码, 只需复制本包, 编译时会自动拉取 MQTT 源码。
+on:
+  workflow_dispatch:
+    inputs:
+      arch:
+        description: '目标架构(all 表示下列全部)'
+        type: choice
+        options:
+          - x86-64
+          - x86-generic
+          - rockchip-armv8
+          - bcm27xx-bcm2711
+          - bcm27xx-bcm2712
+          - mediatek-filogic
+          - ipq806x-generic
+          - ramips-mt7621
+          - ramips-mt7620
+          - ath79-generic
+          - sunxi-cortexa53
+          - mvebu-cortexa9
+          - bcm53xx-generic
+          - octeon-generic
+          - armsr-armv8
+          - layerscape-armv8_64b
+          - all
+        default: x86-64
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PACKAGE_NAME: luci-app-bafa
+  PACKAGE_DIR: luci-app-bafa
+  TZ: Asia/Shanghai
+  ARCHS: "x86-64 x86-generic rockchip-armv8 bcm27xx-bcm2711 bcm27xx-bcm2712 mediatek-filogic ipq806x-generic ramips-mt7621 ramips-mt7620 ath79-generic sunxi-cortexa53 mvebu-cortexa9 bcm53xx-generic octeon-generic armsr-armv8 layerscape-armv8_64b"
+  # ipk: OpenWrt 22.03.7(不含 bcm2712 / mediatek-filogic / armsr-armv8, 22.03 无该平台)
+  SDK_MAP_IPK: |
+    {
+      "x86-64":              "https://downloads.openwrt.org/releases/22.03.7/targets/x86/64/openwrt-sdk-22.03.7-x86-64_gcc-11.2.0_musl.Linux-x86_64.tar.xz",
+      "x86-generic":         "https://downloads.openwrt.org/releases/22.03.7/targets/x86/generic/openwrt-sdk-22.03.7-x86-generic_gcc-11.2.0_musl.Linux-x86_64.tar.xz",
+      "rockchip-armv8":      "https://downloads.openwrt.org/releases/22.03.7/targets/rockchip/armv8/openwrt-sdk-22.03.7-rockchip-armv8_gcc-11.2.0_musl.Linux-x86_64.tar.xz",
+      "bcm27xx-bcm2711":     "https://downloads.openwrt.org/releases/22.03.7/targets/bcm27xx/bcm2711/openwrt-sdk-22.03.7-bcm27xx-bcm2711_gcc-11.2.0_musl.Linux-x86_64.tar.xz",
+      "ipq806x-generic":     "https://downloads.openwrt.org/releases/22.03.7/targets/ipq806x/generic/openwrt-sdk-22.03.7-ipq806x-generic_gcc-11.2.0_musl_eabi.Linux-x86_64.tar.xz",
+      "ramips-mt7621":       "https://downloads.openwrt.org/releases/22.03.7/targets/ramips/mt7621/openwrt-sdk-22.03.7-ramips-mt7621_gcc-11.2.0_musl.Linux-x86_64.tar.xz",
+      "ramips-mt7620":       "https://downloads.openwrt.org/releases/22.03.7/targets/ramips/mt7620/openwrt-sdk-22.03.7-ramips-mt7620_gcc-11.2.0_musl.Linux-x86_64.tar.xz",
+      "ath79-generic":       "https://downloads.openwrt.org/releases/22.03.7/targets/ath79/generic/openwrt-sdk-22.03.7-ath79-generic_gcc-11.2.0_musl.Linux-x86_64.tar.xz",
+      "sunxi-cortexa53":     "https://downloads.openwrt.org/releases/22.03.7/targets/sunxi/cortexa53/openwrt-sdk-22.03.7-sunxi-cortexa53_gcc-11.2.0_musl.Linux-x86_64.tar.xz",
+      "mvebu-cortexa9":      "https://downloads.openwrt.org/releases/22.03.7/targets/mvebu/cortexa9/openwrt-sdk-22.03.7-mvebu-cortexa9_gcc-11.2.0_musl_eabi.Linux-x86_64.tar.xz",
+      "bcm53xx-generic":     "https://downloads.openwrt.org/releases/22.03.7/targets/bcm53xx/generic/openwrt-sdk-22.03.7-bcm53xx-generic_gcc-11.2.0_musl_eabi.Linux-x86_64.tar.xz",
+      "octeon-generic":      "https://downloads.openwrt.org/releases/22.03.7/targets/octeon/generic/openwrt-sdk-22.03.7-octeon-generic_gcc-11.2.0_musl.Linux-x86_64.tar.xz",
+      "layerscape-armv8_64b":"https://downloads.openwrt.org/releases/22.03.7/targets/layerscape/armv8_64b/openwrt-sdk-22.03.7-layerscape-armv8_64b_gcc-11.2.0_musl.Linux-x86_64.tar.xz"
+    }
+  # apk: OpenWrt SNAPSHOT(全部架构)
+  SDK_MAP_APK: |
+    {
+      "x86-64":              "https://downloads.openwrt.org/snapshots/targets/x86/64/openwrt-sdk-x86-64_gcc-14.4.0_musl.Linux-x86_64.tar.zst",
+      "x86-generic":         "https://downloads.openwrt.org/snapshots/targets/x86/generic/openwrt-sdk-x86-generic_gcc-14.4.0_musl.Linux-x86_64.tar.zst",
+      "rockchip-armv8":      "https://downloads.openwrt.org/snapshots/targets/rockchip/armv8/openwrt-sdk-rockchip-armv8_gcc-14.4.0_musl.Linux-x86_64.tar.zst",
+      "bcm27xx-bcm2711":     "https://downloads.openwrt.org/snapshots/targets/bcm27xx/bcm2711/openwrt-sdk-bcm27xx-bcm2711_gcc-14.4.0_musl.Linux-x86_64.tar.zst",
+      "bcm27xx-bcm2712":     "https://downloads.openwrt.org/snapshots/targets/bcm27xx/bcm2712/openwrt-sdk-bcm27xx-bcm2712_gcc-14.4.0_musl.Linux-x86_64.tar.zst",
+      "mediatek-filogic":    "https://downloads.openwrt.org/snapshots/targets/mediatek/filogic/openwrt-sdk-mediatek-filogic_gcc-14.4.0_musl.Linux-x86_64.tar.zst",
+      "ipq806x-generic":     "https://downloads.openwrt.org/snapshots/targets/ipq806x/generic/openwrt-sdk-ipq806x-generic_gcc-14.4.0_musl_eabi.Linux-x86_64.tar.zst",
+      "ramips-mt7621":       "https://downloads.openwrt.org/snapshots/targets/ramips/mt7621/openwrt-sdk-ramips-mt7621_gcc-14.4.0_musl.Linux-x86_64.tar.zst",
+      "ramips-mt7620":       "https://downloads.openwrt.org/snapshots/targets/ramips/mt7620/openwrt-sdk-ramips-mt7620_gcc-14.4.0_musl.Linux-x86_64.tar.zst",
+      "ath79-generic":       "https://downloads.openwrt.org/snapshots/targets/ath79/generic/openwrt-sdk-ath79-generic_gcc-14.4.0_musl.Linux-x86_64.tar.zst",
+      "sunxi-cortexa53":     "https://downloads.openwrt.org/snapshots/targets/sunxi/cortexa53/openwrt-sdk-sunxi-cortexa53_gcc-14.4.0_musl.Linux-x86_64.tar.zst",
+      "mvebu-cortexa9":      "https://downloads.openwrt.org/snapshots/targets/mvebu/cortexa9/openwrt-sdk-mvebu-cortexa9_gcc-14.4.0_musl_eabi.Linux-x86_64.tar.zst",
+      "bcm53xx-generic":     "https://downloads.openwrt.org/snapshots/targets/bcm53xx/generic/openwrt-sdk-bcm53xx-generic_gcc-14.4.0_musl_eabi.Linux-x86_64.tar.zst",
+      "octeon-generic":      "https://downloads.openwrt.org/snapshots/targets/octeon/generic/openwrt-sdk-octeon-generic_gcc-14.4.0_musl.Linux-x86_64.tar.zst",
+      "armsr-armv8":         "https://downloads.openwrt.org/snapshots/targets/armsr/armv8/openwrt-sdk-armsr-armv8_gcc-14.4.0_musl.Linux-x86_64.tar.zst",
+      "layerscape-armv8_64b":"https://downloads.openwrt.org/snapshots/targets/layerscape/armv8_64b/openwrt-sdk-layerscape-armv8_64b_gcc-14.4.0_musl.Linux-x86_64.tar.zst"
+    }
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    name: 生成构建矩阵
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set.outputs.matrix }}
+    steps:
+      - id: set
+        run: |
+          ARCH="${{ github.event.inputs.arch }}"
+          if [ "$ARCH" = "all" ]; then archs="$ARCHS"; else archs="$ARCH"; fi
+          matrix="[]"
+          for a in $archs; do
+            for fmt in ipk apk; do
+              if [ "$fmt" = "ipk" ]; then map="$SDK_MAP_IPK"; else map="$SDK_MAP_APK"; fi
+              # 该架构在对应 SDK 源中不存在时跳过
+              if echo "$map" | jq -e --arg a "$a" 'has($a)' >/dev/null 2>&1; then
+                # ipk 来自 22.03, apk 来自 snapshot
+                label="snapshot"; [ "$fmt" = "ipk" ] && label="22.03"
+                matrix=$(echo "$matrix" | jq -c --arg a "$a" --arg f "$fmt" --arg l "$label" '. + [{arch:$a, format:$f, label:$l}]')
+              fi
+            done
+          done
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          echo "构建矩阵: $matrix"
+
+  build:
+    name: 打包 ${{ matrix.item.arch }} (${{ matrix.item.label }}-${{ matrix.item.format }})
+    needs: prepare
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        item: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+    steps:
+      - name: 检出源码
+        uses: actions/checkout@main
+
+      - name: 安装依赖
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo apt-get update
+          sudo apt-get -y install curl git tar xz-utils zstd jq python3 python3-pyelftools python3-setuptools
+
+      - name: 下载 SDK
+        run: |
+          set -e
+          ARCH="${{ matrix.item.arch }}"
+          FMT="${{ matrix.item.format }}"
+          if [ "$FMT" = "ipk" ]; then
+            SDK_URL=$(echo "$SDK_MAP_IPK" | jq -r --arg a "$ARCH" '.[$a]')
+          else
+            SDK_URL=$(echo "$SDK_MAP_APK" | jq -r --arg a "$ARCH" '.[$a]')
+          fi
+          echo "SDK 地址($FMT): $SDK_URL"
+          mkdir -p tmp
+          SDK_FILE=$(basename "$SDK_URL")
+          curl -SLk --connect-timeout 30 --retry 3 "$SDK_URL" -o "tmp/$SDK_FILE"
+          cd tmp
+          # 直接解压到 SDK/ 并去掉压缩包顶层目录(避免与压缩包文件名同名造成 glob 冲突)
+          mkdir -p SDK
+          case "$SDK_FILE" in
+            *.zst) zstd -dc "$SDK_FILE" | tar xf - -C SDK --strip-components=1 ;;
+            *)     tar xf "$SDK_FILE" -C SDK --strip-components=1 ;;
+          esac
+
+      - name: 复制源码到 SDK
+        run: |
+          mkdir -p "tmp/SDK/package/${PACKAGE_NAME}"
+          cp -a "${PACKAGE_DIR}/." "tmp/SDK/package/${PACKAGE_NAME}/"
+
+      - name: 安装 feeds
+        run: |
+          cd tmp/SDK
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+          echo "CONFIG_PACKAGE_${PACKAGE_NAME}=m" >> .config
+          make defconfig
+
+      - name: 编译 luci
+        run: |
+          cd tmp/SDK
+          make "package/${PACKAGE_NAME}/compile" V=99
+
+      - name: 上传产物
+        uses: actions/upload-artifact@main
+        with:
+          name: luci-app-bafa-${{ matrix.item.arch }}-${{ matrix.item.label }}-${{ matrix.item.format }}
+          path: tmp/SDK/bin/packages/*/*/${{ env.PACKAGE_NAME }}*
+          if-no-files-found: error

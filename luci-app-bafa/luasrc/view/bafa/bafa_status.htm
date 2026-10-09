@@ -1,0 +1,129 @@
+<style type="text/css">
+	.bafa-status {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		padding: 16px 20px;
+		border-radius: 18px;
+		background: rgba(255, 255, 255, 0.55);
+		-webkit-backdrop-filter: blur(20px) saturate(180%);
+		backdrop-filter: blur(20px) saturate(180%);
+		border: 1px solid rgba(255, 255, 255, 0.65);
+		box-shadow: 0 8px 32px rgba(31, 38, 135, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.75);
+		color: #1c1c1e;
+		font-size: 15px;
+		line-height: 1.4;
+		transition: box-shadow 0.3s ease;
+	}
+
+	.bafa-status-icon {
+		width: 22px;
+		height: 22px;
+		flex: 0 0 auto;
+	}
+
+	.bafa-status-text {
+		font-weight: 500;
+	}
+
+	/* 状态圆点，带呼吸动画 */
+	.bafa-dot {
+		position: relative;
+		width: 10px;
+		height: 10px;
+		flex: 0 0 auto;
+		border-radius: 50%;
+		background: currentColor;
+	}
+
+	.bafa-dot::after {
+		content: "";
+		position: absolute;
+		inset: -4px;
+		border-radius: 50%;
+		border: 2px solid currentColor;
+		opacity: 0.5;
+		animation: bafa-pulse 1.6s ease-out infinite;
+	}
+
+	.bafa-status.is-up {
+		color: #1a7f37;
+	}
+
+	.bafa-status.is-down {
+		color: #c0392b;
+	}
+
+	.bafa-status.is-pending {
+		color: rgba(120, 120, 128, 0.9);
+	}
+
+	@keyframes bafa-pulse {
+		0% {
+			transform: scale(0.7);
+			opacity: 0.6;
+		}
+		100% {
+			transform: scale(1.8);
+			opacity: 0;
+		}
+	}
+
+	@media (max-width: 600px) {
+		.bafa-status {
+			padding: 13px 15px;
+			gap: 10px;
+			font-size: 14px;
+			border-radius: 16px;
+		}
+	}
+
+	@media (prefers-color-scheme: dark) {
+		.bafa-status {
+			background: rgba(28, 28, 32, 0.5);
+			border-color: rgba(255, 255, 255, 0.12);
+			box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+		}
+
+		.bafa-status.is-up {
+			color: #30d158;
+		}
+
+		.bafa-status.is-down {
+			color: #ff6b6b;
+		}
+
+		.bafa-status.is-pending {
+			color: rgba(200, 200, 205, 0.85);
+		}
+	}
+</style>
+
+<script type="text/javascript">//<![CDATA[
+	var BAFA_ICON_UP = '<svg class="bafa-status-icon" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8.5 12.5l2.5 2.5 4.5-5"/></svg>';
+	var BAFA_ICON_DOWN = '<svg class="bafa-status-icon" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/></svg>';
+
+	XHR.poll(5, '<%=url([[admin]], [[services]], [[bafa]], [[bafa_status]])%>', null,
+		function (x, data) {
+			var status = document.getElementById('bafa_status');
+			if (!data || !status) return;
+
+			if (data.running) {
+				status.className = 'bafa-status is-up';
+				status.innerHTML = '<span class="bafa-dot"></span>' + BAFA_ICON_UP +
+					'<span class="bafa-status-text">stdoutsubc 正在运行</span>';
+			} else {
+				status.className = 'bafa-status is-down';
+				status.innerHTML = '<span class="bafa-dot"></span>' + BAFA_ICON_DOWN +
+					'<span class="bafa-status-text">stdoutsubc 未运行</span>';
+			}
+		}
+	);
+//]]>
+</script>
+<fieldset class="cbi-section">
+	<div id="bafa_status" class="bafa-status is-pending">
+		<span class="bafa-dot"></span>
+		<span class="bafa-status-text">正在收集状态…</span>
+	</div>
+</fieldset>

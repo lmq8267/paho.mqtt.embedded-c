@@ -87,7 +87,7 @@ void log_error(const char *format, ...)
     va_end(args);
 }
 
-void usage()
+void usage(int status)
 {
     printf("\n");
     printf("====================================\n");
@@ -104,11 +104,12 @@ void usage()
     printf("  --password <密码>       （默认: none，无密码）\n");
     printf("  --showtopics <on|off>   （默认: off，是否显示主题名，若主题含通配符则默认开启）\n");
     printf("  --script <脚本路径>     （收到 MQTT 消息时，执行指定脚本）\n");
+    printf("  -h, --help             显示本帮助信息\n");
     printf("\n");
     printf("示例:\n");
     printf("  stdoutsub 主题名 --host bemfa.com --port 9501 --qos 1 --clientid asa48fd88e53d356ab21841a951284d\n");
     printf("\n");
-    exit(-1);
+    exit(status);
 }
 
 void cfinish(int sig)
@@ -159,46 +160,46 @@ void getopts(int argc, char** argv)
                 }
                 else
                 {
-                    usage();
+                    usage(-1);
                 }
             }
             else
-                usage();
+                usage(-1);
         }
         else if (strcmp(argv[count], "--host") == 0)
         {
             if (++count < argc)
                 opts.host = argv[count];
             else
-                usage();
+                usage(-1);
         }
         else if (strcmp(argv[count], "--port") == 0)
         {
             if (++count < argc)
                 opts.port = atoi(argv[count]);
             else
-                usage();
+                usage(-1);
         }
         else if (strcmp(argv[count], "--clientid") == 0)
         {
             if (++count < argc)
                 opts.clientid = argv[count];
             else
-                usage();
+                usage(-1);
         }
         else if (strcmp(argv[count], "--username") == 0)
         {
             if (++count < argc)
                 opts.username = argv[count];
             else
-                usage();
+                usage(-1);
         }
         else if (strcmp(argv[count], "--password") == 0)
         {
             if (++count < argc)
                 opts.password = argv[count];
             else
-                usage();
+                usage(-1);
         }
         else if (strcmp(argv[count], "--delimiter") == 0)
         {
@@ -222,18 +223,18 @@ void getopts(int argc, char** argv)
                 }
                 else
                 {
-                    usage();
+                    usage(-1);
                 }
             }
             else
-                usage();
+                usage(-1);
         }
         else if (strcmp(argv[count], "--script") == 0)
         {
             if (++count < argc)
                 opts.script = argv[count];
             else
-                usage();
+                usage(-1);
         }
         count++;
     }
@@ -311,10 +312,17 @@ int main(int argc, char** argv)
     static char topic_storage[MAX_MESSAGE_HANDLERS][256];  
     int stored_topic_count = 0;
 	
-    if (argc < 2)  
-        usage();  
-  
-    char* topic_list = argv[1];  
+    // 检测 -h / --help: 显示帮助信息并以成功状态退出
+    for (int i = 1; i < argc; i++)
+    {
+        if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0)
+            usage(0);
+    }
+
+    if (argc < 2)
+        usage(-1);
+
+    char* topic_list = argv[1];
     getopts(argc, argv);  
       
     signal(SIGINT, cfinish);  
